@@ -52,25 +52,53 @@ module Kitchen
         options = {}
         config[:server_name] ||= generate_name(instance.name)
         options['displayname'] = config[:server_name]
+
         if (!config[:cloudstack_network_id].nil?)
           options['networkids'] = config[:cloudstack_network_id]
+        elsif (!config[:cloudstack_network_name].nil?)
+          options['networkids'] = name_to_id(compute, config[:cloudstack_network_name], 'network')
         end
 
         if (!config[:cloudstack_security_group_id].nil?)
           options['securitygroupids'] = config[:cloudstack_security_group_id]
+        elsif (!config[:cloudstack_security_group_name].nil?)
+          options['securitygroupids'] = name_to_id(compute, config[:cloudstack_security_group_name], 'security_group');
         end
 
         if (!config[:cloudstack_ssh_keypair_name].nil?)
           options['keypair'] = config[:cloudstack_ssh_keypair_name]
         end
 
-        options[:templateid] = config[:cloudstack_template_id]
-        options[:serviceofferingid] = config[:cloudstack_serviceoffering_id]
-        options[:zoneid] = config[:cloudstack_zone_id]
+        if (!options[:cloudstack_zone_id].nil?)
+		options[:zoneid] = config[:cloudstack_zone_id]
+        elsif (!options[:cloudstack_zone_name].nil?)
+		options[:zoneid] = name_to_id(compute, config[:cloudstack_zone_name], 'zone', {'available' => true});
+	end
+
+        if (!options[:cloudstack_template_id].nil?)
+		options[:templateid] = config[:cloudstack_template_id]
+        elsif (!options[:cloudstack_template_name].nil?)
+		options[:templateid] = name_to_id(compute, config[:cloudstack_template_name], 'template', {'zoneid' => options[:zoneid], 'templatefilter' => 'executable'})
+        end
+
+        if (!options[:cloudstack_serviceoffering_id].nil?)
+		options[:serviceofferingid] = config[:cloudstack_serviceoffering_id]
+        elsif (!options[:cloudstack_serviceoffering_name].nil?)
+		options[:serviceofferingid] = name_to_id(compute, config[:cloudstack_serviceoffering_name], 'service_offering')
+	end
 
         debug(options)
         # binding.pry
         compute.deploy_virtual_machine(options)
+      end
+
+      def name_to_id(compute, resource_name, resource_type, options={})
+        pluralised_type = "#{resource_type}s"
+        full_response = compute.send("list_#{pluralised_type}".to_sym, options)
+        response = full_response["list#{pluralised_type.tr('_', '')}response"][resource_type.tr('_', '')]
+        result = response.find { |type| type["name"] == resource_name }
+        # TODO handle errors when response > 1 or response = 0
+        result['id']
       end
 
       def create(state)
